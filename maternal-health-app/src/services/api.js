@@ -57,3 +57,28 @@ export const recordMovement = (hasMovement, count) => request('POST', '/movement
 export const getMovements = () => request('GET', '/movements');
 export const triggerEmergency = (message) => request('POST', '/emergency', { message });
 export const getUser = () => request('GET', '/auth/me');
+
+export const analyzeAudio = async (uri, mimeType = 'audio/m4a') => {
+  const url = `${API_BASE}/voice/analyze`;
+  const token = await loadStoredToken();
+
+  const formData = new FormData();
+  formData.append('audio', {
+    uri,
+    type: mimeType,
+    name: 'recording.m4a',
+  });
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'multipart/form-data',
+      ...(token && { Authorization: `Bearer ${token}` }),
+    },
+    body: formData,
+  });
+
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.message || 'Failed to analyze audio');
+  return data;
+};

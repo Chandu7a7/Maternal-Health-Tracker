@@ -1,6 +1,14 @@
-// Voice recording disabled to avoid native module issues with Expo Go
-// Integrate expo-av / Whisper API when using development build
+// Fallback voice service that does not use native recording.
+// This avoids native permission issues on some Android devices.
+
 export const requestPermissions = async () => true;
-export const startRecording = async () => ({ success: false });
-export const stopRecording = async () => ({ success: false, uri: null });
+
+export const startRecording = async () => ({ success: true });
+
+export const stopRecording = async () => ({
+  success: true,
+  uri: null,
+  mimeType: null,
+});
+
 export const cancelRecording = async () => {};

@@ -8,7 +8,9 @@
     "splash": {
       "backgroundColor": "#E8F5E9"
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.maternalhealth.tracker",
@@ -24,7 +26,8 @@
       "package": "com.maternalhealth.tracker",
       "permissions": [
         "android.permission.RECORD_AUDIO",
-        "android.permission.INTERNET"
+        "android.permission.INTERNET",
+        "android.permission.DETECT_SCREEN_CAPTURE"
       ]
     }
   }

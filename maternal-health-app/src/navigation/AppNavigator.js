@@ -12,6 +12,9 @@ import HistoryScreen from '../screens/HistoryScreen';
 import EmergencyScreen from '../screens/EmergencyScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import SettingsScreen from '../screens/SettingsScreen';
+import HealthRiskStatusScreen from '../screens/HealthRiskStatusScreen';
+import ChatScreen from '../screens/ChatScreen';
+import NutritionPlanScreen from '../screens/NutritionPlanScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -168,6 +171,9 @@ export default function AppNavigator({ hasToken }) {
       <Stack.Screen name="Main" component={MainTabs} />
       <Stack.Screen name="Profile" component={ProfileScreen} />
       <Stack.Screen name="Settings" component={SettingsScreen} />
+      <Stack.Screen name="HealthRiskStatus" component={HealthRiskStatusScreen} />
+      <Stack.Screen name="Chat" component={ChatScreen} />
+      <Stack.Screen name="NutritionPlan" component={NutritionPlanScreen} />
     </Stack.Navigator>
   );
 }

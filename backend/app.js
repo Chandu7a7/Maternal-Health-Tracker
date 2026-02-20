@@ -7,6 +7,8 @@ const symptomRoutes = require('./routes/symptomRoutes');
 const riskRoutes = require('./routes/riskRoutes');
 const emergencyRoutes = require('./routes/emergencyRoutes');
 const movementRoutes = require('./routes/movementRoutes');
+const voiceRoutes = require('./routes/voiceRoutes');
+const chatbotRoutes = require('./routes/chatbotRoutes');
 
 const app = express();
 app.use(cors({ origin: '*' }));
@@ -23,6 +25,8 @@ app.use('/api/symptoms', symptomRoutes);
 app.use('/api/risk', riskRoutes);
 app.use('/api/emergency', emergencyRoutes);
 app.use('/api/movements', movementRoutes);
+app.use('/api/voice', voiceRoutes);
+app.use('/api/chatbot', chatbotRoutes);
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 

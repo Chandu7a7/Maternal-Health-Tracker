@@ -9,453 +9,344 @@ import {
   ActivityIndicator,
   Animated,
   ScrollView,
+  SafeAreaView,
+  StatusBar,
 } from 'react-native';
-import { addSymptom } from '../services/api';
-import { startRecording, stopRecording, requestPermissions } from '../services/voiceService';
+import { Audio } from 'expo-av';
+import { analyzeAudio, addSymptom } from '../services/api';
 
 const PRIMARY = '#ec135b';
-const BG_LIGHT = '#f8f6f6';
+const BG_COLOR = '#F9FBFC';
 
-export default function VoiceInputScreen() {
+export default function VoiceInputScreen({ navigation }) {
+  const [recording, setRecording] = useState(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [text, setText] = useState('');
-  const [recording, setRecording] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [lastResult, setLastResult] = useState(null);
-  const [showSuccess, setShowSuccess] = useState(false);
-  const pulseAnim1 = useRef(new Animated.Value(0)).current;
-  const pulseAnim2 = useRef(new Animated.Value(0)).current;
+  const [status, setStatus] = useState('Ready to listen');
+
+  const pulseAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
-    requestPermissions();
-  }, []);
-
-  useEffect(() => {
-    if (recording) {
-      // Start pulse animations for two rings
-      const createPulse = (animValue) => {
-        return Animated.loop(
-          Animated.sequence([
-            Animated.timing(animValue, {
-              toValue: 1,
-              duration: 2000,
-              useNativeDriver: true,
-            }),
-            Animated.timing(animValue, {
-              toValue: 0,
-              duration: 0,
-              useNativeDriver: true,
-            }),
-          ])
-        );
-      };
-
-      const anim1 = createPulse(pulseAnim1);
-      const anim2 = createPulse(pulseAnim2);
-      
-      // Stagger the animations
-      setTimeout(() => anim2.start(), 1000);
-      anim1.start();
-
-      return () => {
-        anim1.stop();
-        anim2.stop();
-        pulseAnim1.setValue(0);
-        pulseAnim2.setValue(0);
-      };
+    if (isRecording) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 1.2,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 1,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+        ])
+      ).start();
     } else {
-      pulseAnim1.setValue(0);
-      pulseAnim2.setValue(0);
+      pulseAnim.setValue(1);
     }
-  }, [recording]);
+  }, [isRecording]);
 
-  const handleVoicePress = async () => {
-    if (recording) {
-      setRecording(false);
-      const { success, uri } = await stopRecording();
-      if (success && uri) {
-        // In real app, this would be transcribed text from API
-        setText('Mujhe chakkar aa rahe hai');
-      }
-      return;
-    }
-    setRecording(true);
-    await startRecording();
-  };
-
-  const handleSubmit = async () => {
-    const symptom = text.trim();
-    if (!symptom) {
-      Alert.alert('Error', 'Please enter or record a symptom');
-      return;
-    }
-    setLoading(true);
+  async function startRecording() {
     try {
-      const data = await addSymptom(symptom);
-      setLastResult(data);
-      setText('');
-      setShowSuccess(true);
-      setTimeout(() => setShowSuccess(false), 3000);
-      if (data.risk === 'High') {
-        Alert.alert('⚠️ High Risk Detected', data.advice || 'Please consult your doctor immediately.');
+      setStatus('Requesting permissions...');
+      const permission = await Audio.requestPermissionsAsync();
+
+      if (permission.status === 'granted') {
+        setStatus('Starting microphone...');
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: true,
+          playsInSilentModeIOS: true,
+        });
+
+        const { recording } = await Audio.Recording.createAsync(
+          Audio.RecordingOptionsPresets.HIGH_QUALITY
+        );
+
+        setRecording(recording);
+        setIsRecording(true);
+        setStatus('Listening...');
+        setText('');
+      } else {
+        Alert.alert('Permission Denied', 'Please enable microphone access in settings.');
       }
     } catch (err) {
-      Alert.alert('Error', err.response?.data?.message || err.message);
-    } finally {
-      setLoading(false);
+      console.error('Failed to start recording', err);
+      Alert.alert('Error', 'Could not start recording');
     }
-  };
+  }
 
-  const handleCancel = () => {
-    if (recording) {
-      setRecording(false);
-      stopRecording();
+  async function stopRecording() {
+    setIsRecording(false);
+    setStatus('Stopping...');
+    try {
+      await recording.stopAndUnloadAsync();
+      const uri = recording.getURI();
+      setRecording(null);
+
+      // Analyze the recorded audio
+      handleAnalysis(uri);
+    } catch (err) {
+      console.error('Failed to stop recording', err);
+      setStatus('Error stopping');
     }
-    setText('');
+  }
+
+  async function handleAnalysis(uri) {
+    setIsAnalyzing(true);
+    setStatus('Analyzing with AI...');
+    try {
+      const result = await analyzeAudio(uri);
+      setText(result.transcript || '');
+      setStatus('Analysis complete');
+
+      if (result.riskLevel === 'High' || result.riskLevel === 'Medium') {
+        navigation.navigate('HealthRiskStatus', {
+          riskLevel: result.riskLevel,
+          advice: result.advice,
+          transcript: result.transcript,
+        });
+      }
+    } catch (err) {
+      console.error('Analysis error', err);
+      Alert.alert('Analysis Failed', 'Could not process your voice. Please try again or type manually.');
+      setStatus('Analysis failed');
+    } finally {
+      setIsAnalyzing(false);
+    }
+  }
+
+  const handleSaveSymptom = async () => {
+    if (!text.trim()) return;
+    setIsAnalyzing(true);
+    try {
+      await addSymptom(text);
+      Alert.alert('Success', 'Your symptom has been recorded.');
+      setText('');
+      setStatus('Symptom saved');
+    } catch (err) {
+      Alert.alert('Error', 'Failed to save symptom');
+    } finally {
+      setIsAnalyzing(false);
+    }
   };
 
   return (
-    <View style={styles.container}>
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Success Notification Banner */}
-        {showSuccess && (
-          <View style={styles.successBanner}>
-            <Text style={styles.successIcon}>✓</Text>
-            <Text style={styles.successText}>Your symptom has been recorded</Text>
-          </View>
-        )}
-
-        {/* Header Section */}
+    <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="dark-content" />
+      <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>Tell Us How You Feel Today</Text>
-          <Text style={styles.headerSubtitle}>Press the mic and speak your symptoms</Text>
+          <Text style={styles.title}>Voice Input</Text>
+          <Text style={styles.subtitle}>Tell AI how you feel today</Text>
         </View>
 
-        {/* Main Section: Microphone & Listening */}
-        <View style={styles.mainSection}>
-          {/* Large Pulse Microphone Button */}
-          <View style={styles.micContainer}>
-            {recording && (
-              <>
-                <Animated.View
-                  style={[
-                    styles.pulseRing,
-                    {
-                      transform: [
-                        {
-                          scale: pulseAnim1.interpolate({
-                            inputRange: [0, 1],
-                            outputRange: [1, 1.5],
-                          }),
-                        },
-                      ],
-                      opacity: pulseAnim1.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [0.7, 0],
-                      }),
-                    },
-                  ]}
-                />
-                <Animated.View
-                  style={[
-                    styles.pulseRing,
-                    {
-                      transform: [
-                        {
-                          scale: pulseAnim2.interpolate({
-                            inputRange: [0, 1],
-                            outputRange: [1, 1.5],
-                          }),
-                        },
-                      ],
-                      opacity: pulseAnim2.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [0.7, 0],
-                      }),
-                    },
-                  ]}
-                />
-              </>
-            )}
-            <TouchableOpacity
-              style={[styles.micBtn, recording && styles.micBtnRecording]}
-              onPress={handleVoicePress}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.micIcon}>🎤</Text>
-            </TouchableOpacity>
-            {recording && (
-              <View style={styles.listeningIndicator}>
-                <View style={styles.listeningDot} />
-                <Text style={styles.listeningText}>LISTENING...</Text>
-              </View>
-            )}
+        <View style={styles.main}>
+          <View style={styles.statusBadge}>
+            <Text style={[styles.statusText, isRecording && styles.recordingText]}>
+              {status.toUpperCase()}
+            </Text>
           </View>
 
-          {/* Live Preview Area */}
-          {(text || recording) && (
-            <View style={styles.previewCard}>
-              <Text style={styles.previewLabel}>LIVE PREVIEW</Text>
-              <Text style={styles.previewText}>
-                {text || (recording ? 'Listening...' : '')}
-              </Text>
-            </View>
-          )}
+          <View style={styles.micContainer}>
+            <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
+              <TouchableOpacity
+                onPress={isRecording ? stopRecording : startRecording}
+                disabled={isAnalyzing}
+                style={[
+                  styles.micButton,
+                  isRecording && styles.micButtonRecording,
+                  isAnalyzing && styles.micButtonDisabled
+                ]}
+              >
+                {isAnalyzing ? (
+                  <ActivityIndicator color="#fff" size="large" />
+                ) : (
+                  <Text style={styles.micEmoji}>{isRecording ? '🛑' : '🎤'}</Text>
+                )}
+              </TouchableOpacity>
+            </Animated.View>
+            <Text style={styles.hintText}>
+              {isRecording ? 'Tap to finish' : 'Tap to start speaking'}
+            </Text>
+          </View>
 
-          {/* Text Input (Alternative) */}
-          <View style={styles.inputContainer}>
+          <View style={styles.inputCard}>
+            <Text style={styles.inputLabel}>RECOGNIZED SYMPTOMS</Text>
             <TextInput
-              style={styles.input}
-              placeholder="Or type symptom: chakkar, ulti, bleeding, no movement..."
-              placeholderTextColor="#94a3b8"
+              style={styles.textInput}
               value={text}
               onChangeText={setText}
+              placeholder="Your symptoms will appear here after recording..."
               multiline
-              numberOfLines={3}
+              numberOfLines={4}
+              editable={!isAnalyzing}
             />
           </View>
 
-          {/* Action Buttons */}
-          <View style={styles.actionsContainer}>
+          <View style={styles.buttonRow}>
             <TouchableOpacity
-              style={[styles.saveBtn, loading && styles.buttonDisabled]}
-              onPress={handleSubmit}
-              disabled={loading || !text.trim()}
-              activeOpacity={0.8}
+              style={[styles.saveButton, (!text || isAnalyzing) && styles.buttonDisabled]}
+              onPress={handleSaveSymptom}
+              disabled={!text || isAnalyzing}
             >
-              {loading ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <>
-                  <Text style={styles.saveIcon}>💾</Text>
-                  <Text style={styles.saveText}>Save Symptom</Text>
-                </>
-              )}
+              <Text style={styles.buttonText}>Save Symptom</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={styles.cancelBtn}
-              onPress={handleCancel}
-              activeOpacity={0.7}
+              style={styles.clearButton}
+              onPress={() => { setText(''); setStatus('Ready'); }}
             >
-              <Text style={styles.cancelText}>Cancel</Text>
+              <Text style={styles.clearButtonText}>Clear</Text>
             </TouchableOpacity>
           </View>
         </View>
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: BG_LIGHT,
-  },
-  scroll: {
-    flex: 1,
+    backgroundColor: BG_COLOR,
   },
   scrollContent: {
     flexGrow: 1,
-    paddingBottom: 100,
-  },
-  // Success Banner
-  successBanner: {
-    marginHorizontal: 16,
-    marginTop: 16,
-    backgroundColor: '#ecfdf5',
-    borderWidth: 1,
-    borderColor: '#a7f3d0',
-    borderRadius: 12,
-    padding: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  successIcon: {
-    fontSize: 20,
-    color: '#059669',
-  },
-  successText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#065f46',
-    flex: 1,
-  },
-  // Header
-  header: {
-    paddingTop: 32,
     paddingHorizontal: 24,
+    paddingBottom: 40,
+  },
+  header: {
+    marginTop: 40,
+    marginBottom: 40,
+    alignItems: 'center',
+  },
+  title: {
+    fontSize: 32,
+    fontWeight: '900',
+    color: '#1a1a1a',
+    letterSpacing: -1,
+  },
+  subtitle: {
+    fontSize: 16,
+    color: '#666',
+    marginTop: 4,
+  },
+  main: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  statusBadge: {
+    backgroundColor: '#fff',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginBottom: 40,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#999',
+    letterSpacing: 1,
+  },
+  recordingText: {
+    color: PRIMARY,
+  },
+  micContainer: {
     alignItems: 'center',
     marginBottom: 40,
   },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#0f172a',
-    letterSpacing: -0.5,
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  headerSubtitle: {
-    fontSize: 14,
-    color: '#64748b',
-    textAlign: 'center',
-  },
-  // Main Section
-  mainSection: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-    gap: 32,
-  },
-  // Microphone Container
-  micContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
-  },
-  pulseRing: {
-    position: 'absolute',
-    width: 128,
-    height: 128,
-    borderRadius: 64,
+  micButton: {
+    width: 140,
+    height: 140,
+    borderRadius: 70,
     backgroundColor: PRIMARY,
-    opacity: 0.4,
-  },
-  micBtn: {
-    width: 128,
-    height: 128,
-    borderRadius: 64,
-    backgroundColor: PRIMARY,
-    alignItems: 'center',
     justifyContent: 'center',
+    alignItems: 'center',
     shadowColor: PRIMARY,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    elevation: 8,
-    zIndex: 1,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 10,
   },
-  micBtnRecording: {
-    backgroundColor: PRIMARY,
+  micButtonRecording: {
+    backgroundColor: '#000',
   },
-  micIcon: {
-    fontSize: 48,
+  micButtonDisabled: {
+    backgroundColor: '#ccc',
   },
-  listeningIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 32,
+  micEmoji: {
+    fontSize: 60,
   },
-  listeningDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: PRIMARY,
+  hintText: {
+    marginTop: 16,
+    fontSize: 14,
+    color: '#666',
+    fontWeight: '600',
   },
-  listeningText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: PRIMARY,
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-  },
-  // Preview Card
-  previewCard: {
+  inputCard: {
     width: '100%',
-    maxWidth: 400,
     backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderRadius: 24,
+    padding: 24,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
+    shadowRadius: 20,
+    elevation: 4,
+    marginBottom: 24,
   },
-  previewLabel: {
+  inputLabel: {
     fontSize: 10,
-    fontWeight: '700',
-    color: '#94a3b8',
-    letterSpacing: 2,
-    textTransform: 'uppercase',
-    marginBottom: 8,
+    fontWeight: '800',
+    color: '#999',
+    letterSpacing: 1.5,
+    marginBottom: 12,
   },
-  previewText: {
-    fontSize: 20,
-    fontWeight: '500',
-    color: '#0f172a',
-    fontStyle: 'italic',
-    lineHeight: 28,
-  },
-  // Input Container
-  inputContainer: {
-    width: '100%',
-    maxWidth: 400,
-  },
-  input: {
-    backgroundColor: '#fff',
-    padding: 16,
-    borderRadius: 12,
-    fontSize: 16,
+  textInput: {
+    fontSize: 18,
+    color: '#1a1a1a',
     minHeight: 100,
     textAlignVertical: 'top',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    color: '#0f172a',
+    lineHeight: 26,
   },
-  // Actions Container
-  actionsContainer: {
+  buttonRow: {
     width: '100%',
-    maxWidth: 400,
     gap: 12,
-    marginTop: 16,
   },
-  saveBtn: {
-    height: 64,
+  saveButton: {
     backgroundColor: PRIMARY,
-    borderRadius: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
+    height: 60,
+    borderRadius: 18,
     justifyContent: 'center',
-    gap: 8,
+    alignItems: 'center',
     shadowColor: PRIMARY,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.2,
     shadowRadius: 8,
     elevation: 4,
   },
   buttonDisabled: {
-    opacity: 0.7,
+    opacity: 0.5,
   },
-  saveIcon: {
-    fontSize: 20,
-  },
-  saveText: {
+  buttonText: {
     color: '#fff',
     fontSize: 18,
     fontWeight: '700',
   },
-  cancelBtn: {
+  clearButton: {
     height: 56,
-    backgroundColor: 'transparent',
-    borderWidth: 2,
-    borderColor: '#cbd5e1',
-    borderRadius: 12,
-    alignItems: 'center',
     justifyContent: 'center',
+    alignItems: 'center',
   },
-  cancelText: {
+  clearButtonText: {
+    color: '#666',
     fontSize: 16,
-    fontWeight: '700',
-    color: '#64748b',
+    fontWeight: '600',
   },
 });
