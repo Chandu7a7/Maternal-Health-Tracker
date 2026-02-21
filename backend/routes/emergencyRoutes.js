@@ -3,6 +3,6 @@ const router = express.Router();
 const emergencyController = require('../controllers/emergencyController');
 const { protect } = require('../middleware/auth');
 
-router.post('/', protect, emergencyController.trigger);
+router.post('/', protect, emergencyController.triggerEmergency);
 
 module.exports = router;

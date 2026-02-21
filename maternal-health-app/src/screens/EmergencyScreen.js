@@ -57,7 +57,7 @@ export default function EmergencyScreen({ navigation }) {
             setLoading(true);
             try {
               await triggerEmergency('High risk - Immediate attention needed');
-              Alert.alert('✅ Sent', 'Emergency SMS sent to registered contacts.');
+              Alert.alert('✅ Sent', 'Emergency Alert Sent Successfully');
             } catch (err) {
               Alert.alert('Error', err.response?.data?.message || 'Could not send. Please try again.');
             } finally {
@@ -145,20 +145,20 @@ export default function EmergencyScreen({ navigation }) {
             <View style={styles.contactInfo}>
               <Text style={styles.contactName}>Dr. Sharma</Text>
               <Text style={styles.contactPhone}>
-                {user?.doctorContact || '+91 98765 43210'}
+                {user?.doctorContact || '7725094650'}
               </Text>
             </View>
             <View style={styles.contactActions}>
               <TouchableOpacity
                 style={styles.actionBtn}
-                onPress={() => handleCall(user?.doctorContact || '919876543210')}
+                onPress={() => handleCall(user?.doctorContact || '7725094650')}
                 activeOpacity={0.7}
               >
                 <Text style={styles.actionIcon}>📞</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.actionBtn}
-                onPress={() => handleSMS(user?.doctorContact || '919876543210')}
+                onPress={() => handleSMS(user?.doctorContact || '7725094650')}
                 activeOpacity={0.7}
               >
                 <Text style={styles.actionIcon}>💬</Text>
@@ -169,25 +169,25 @@ export default function EmergencyScreen({ navigation }) {
           {/* Family Card */}
           <View style={styles.contactCard}>
             <View style={styles.contactAvatar}>
-              <Text style={styles.avatarInitials}>RK</Text>
+              <Text style={styles.avatarInitials}>FM</Text>
             </View>
             <View style={styles.contactInfo}>
-              <Text style={styles.contactName}>Rajesh (Husband)</Text>
+              <Text style={styles.contactName}>Family Member</Text>
               <Text style={styles.contactPhone}>
-                {user?.familyContact || '+91 91234 56789'}
+                {user?.familyContact || '909838601'}
               </Text>
             </View>
             <View style={styles.contactActions}>
               <TouchableOpacity
                 style={styles.actionBtn}
-                onPress={() => handleCall(user?.familyContact || '919123456789')}
+                onPress={() => handleCall(user?.familyContact || '909838601')}
                 activeOpacity={0.7}
               >
                 <Text style={styles.actionIcon}>📞</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.actionBtn}
-                onPress={() => handleSMS(user?.familyContact || '919123456789')}
+                onPress={() => handleSMS(user?.familyContact || '909838601')}
                 activeOpacity={0.7}
               >
                 <Text style={styles.actionIcon}>💬</Text>

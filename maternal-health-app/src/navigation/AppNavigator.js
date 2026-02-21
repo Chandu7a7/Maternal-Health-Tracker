@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useContext } from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { LanguageContext } from '../context/LanguageContext';
 
 import LoginScreen from '../screens/LoginScreen';
 import RegisterScreen from '../screens/RegisterScreen';
@@ -15,6 +16,8 @@ import SettingsScreen from '../screens/SettingsScreen';
 import HealthRiskStatusScreen from '../screens/HealthRiskStatusScreen';
 import ChatScreen from '../screens/ChatScreen';
 import NutritionPlanScreen from '../screens/NutritionPlanScreen';
+import NotificationScreen from '../screens/NotificationScreen';
+import HealthReminderScreen from '../screens/HealthReminderScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -37,6 +40,7 @@ function TabIcon({ name, focused }) {
 }
 
 function CustomTabBar({ state, descriptors, navigation }) {
+  const { t } = useContext(LanguageContext);
   const routes = state.routes;
   const voiceIndex = routes.findIndex(r => r.name === 'Voice');
   const leftRoutes = routes.slice(0, voiceIndex);
@@ -59,6 +63,7 @@ function CustomTabBar({ state, descriptors, navigation }) {
               navigation.navigate(route.name);
             }
           };
+          const labelKey = (options.tabBarLabel || route.name).toLowerCase();
           return (
             <TouchableOpacity
               key={route.key}
@@ -72,7 +77,7 @@ function CustomTabBar({ state, descriptors, navigation }) {
             >
               <TabIcon name={route.name} focused={isFocused} />
               <Text style={[styles.tabLabel, isFocused && styles.tabLabelFocused]}>
-                {options.tabBarLabel || route.name}
+                {t(labelKey)}
               </Text>
             </TouchableOpacity>
           );
@@ -123,6 +128,7 @@ function CustomTabBar({ state, descriptors, navigation }) {
               navigation.navigate(route.name);
             }
           };
+          const labelKey = (options.tabBarLabel || route.name).toLowerCase();
           return (
             <TouchableOpacity
               key={route.key}
@@ -136,7 +142,7 @@ function CustomTabBar({ state, descriptors, navigation }) {
             >
               <TabIcon name={route.name} focused={isFocused} />
               <Text style={[styles.tabLabel, isFocused && styles.tabLabelFocused]}>
-                {options.tabBarLabel || route.name}
+                {t(labelKey)}
               </Text>
             </TouchableOpacity>
           );
@@ -174,6 +180,8 @@ export default function AppNavigator({ hasToken }) {
       <Stack.Screen name="HealthRiskStatus" component={HealthRiskStatusScreen} />
       <Stack.Screen name="Chat" component={ChatScreen} />
       <Stack.Screen name="NutritionPlan" component={NutritionPlanScreen} />
+      <Stack.Screen name="Notifications" component={NotificationScreen} />
+      <Stack.Screen name="HealthReminders" component={HealthReminderScreen} />
     </Stack.Navigator>
   );
 }

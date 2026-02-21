@@ -9,6 +9,7 @@ const emergencyRoutes = require('./routes/emergencyRoutes');
 const movementRoutes = require('./routes/movementRoutes');
 const voiceRoutes = require('./routes/voiceRoutes');
 const chatbotRoutes = require('./routes/chatbotRoutes');
+const nutritionRoutes = require('./routes/nutritionRoutes');
 
 const app = express();
 app.use(cors({ origin: '*' }));
@@ -27,6 +28,7 @@ app.use('/api/emergency', emergencyRoutes);
 app.use('/api/movements', movementRoutes);
 app.use('/api/voice', voiceRoutes);
 app.use('/api/chatbot', chatbotRoutes);
+app.use('/api/nutrition', nutritionRoutes);
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 

@@ -4,6 +4,7 @@ import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import AppNavigator from './navigation/AppNavigator';
 import { initAuth } from './services/api';
+import { LanguageProvider } from './context/LanguageContext';
 
 export default function App() {
   const [ready, setReady] = useState(false);
@@ -25,10 +26,12 @@ export default function App() {
   }
 
   return (
-    <NavigationContainer>
-      <StatusBar style="dark" />
-      <AppNavigator hasToken={hasToken} />
-    </NavigationContainer>
+    <LanguageProvider>
+      <NavigationContainer>
+        <StatusBar style="dark" />
+        <AppNavigator hasToken={hasToken} />
+      </NavigationContainer>
+    </LanguageProvider>
   );
 }
 

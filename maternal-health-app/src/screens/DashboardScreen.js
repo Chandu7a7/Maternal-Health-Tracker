@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useContext } from 'react';
 import {
   View,
   Text,
@@ -13,8 +13,9 @@ import {
   Dimensions,
 } from 'react-native';
 import { useNavigation, CommonActions } from '@react-navigation/native';
-import { getRiskLevel, getSymptoms, getUser, setAuthToken } from '../services/api';
+import { getRiskLevel, getSymptoms, getUser, getMovements, setAuthToken } from '../services/api';
 import { getRiskColor, getTrimester } from '../utils/helpers';
+import { LanguageContext } from '../context/LanguageContext';
 
 const { width } = Dimensions.get('window');
 
@@ -31,9 +32,11 @@ const DANGER_COLOR = '#EF476F';
 
 export default function DashboardScreen({ navigation: navProp }) {
   const navigation = useNavigation();
+  const { t } = useContext(LanguageContext);
   const [user, setUser] = useState(null);
   const [risk, setRisk] = useState({ level: 'Safe', advice: '' });
   const [symptoms, setSymptoms] = useState([]);
+  const [movements, setMovements] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
   const [drawerVisible, setDrawerVisible] = useState(false);
   const slideAnim = useRef(new Animated.Value(-300)).current;
@@ -43,14 +46,16 @@ export default function DashboardScreen({ navigation: navProp }) {
 
   const load = async () => {
     try {
-      const [u, r, s] = await Promise.all([
+      const [u, r, s, m] = await Promise.all([
         getUser().catch(() => null),
         getRiskLevel().catch(() => ({ level: 'Safe', advice: 'Continue regular checkups.' })),
         getSymptoms().catch(() => []),
+        getMovements().catch(() => []),
       ]);
       setUser(u);
       setRisk(r);
       setSymptoms(Array.isArray(s) ? s : s?.symptoms || []);
+      setMovements(Array.isArray(m) ? m : m?.movements || []);
     } catch (e) {
       setRisk({ level: 'Safe', advice: 'Continue regular checkups.' });
     }
@@ -128,6 +133,17 @@ export default function DashboardScreen({ navigation: navProp }) {
         } catch (error) {
           Alert.alert('Error', `Could not navigate to Settings: ${error.message}`);
         }
+      } else if (screen === 'reminders') {
+        try {
+          const parentNav = navigation.getParent();
+          if (parentNav && typeof parentNav.navigate === 'function') {
+            parentNav.navigate('HealthReminders');
+          } else {
+            navigation.dispatch(CommonActions.navigate({ name: 'HealthReminders' }));
+          }
+        } catch (error) {
+          Alert.alert('Error', `Could not navigate to Reminders: ${error.message}`);
+        }
       }
     }, 300);
   };
@@ -182,6 +198,48 @@ export default function DashboardScreen({ navigation: navProp }) {
     riskBgColor = `${SUCCESS_COLOR}15`;
   }
 
+  // Calculate actual daily kicks from backend data
+  const todayString = new Date().toDateString();
+  const todayMovement = movements.find(m => new Date(m.date).toDateString() === todayString);
+  const kicksCount = todayMovement ? todayMovement.count : 0;
+
+  // Calculate next intelligent clinic visit date based on current pregnancy month
+  let nextVisitDay = '12';
+  let nextVisitMonth = 'NOV';
+
+  if (user?.nextDoctorVisit) {
+    const visitDate = new Date(user.nextDoctorVisit);
+    const monthNames = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+    nextVisitDay = visitDate.getDate().toString();
+    nextVisitMonth = monthNames[visitDate.getMonth()];
+  } else if (user && user.createdAt) {
+    const createdDate = new Date(user.createdAt);
+    let intervalDays = 28; // Default 4 weeks for early pregnancy
+
+    if (month >= 7 && month <= 8) {
+      intervalDays = 14; // Every 2 weeks in late pregnancy
+    } else if (month >= 9) {
+      intervalDays = 7; // Every week at the very end
+    }
+
+    let visitDate = new Date(createdDate);
+    const now = new Date();
+    // Move the date forward by interval until it's in the future
+    while (visitDate <= now) {
+      visitDate.setDate(visitDate.getDate() + intervalDays);
+    }
+
+    // Fallback if data is corrupted
+    if (visitDate.getFullYear() > now.getFullYear() + 1) {
+      visitDate = new Date();
+      visitDate.setDate(now.getDate() + intervalDays);
+    }
+
+    const monthNames = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+    nextVisitDay = visitDate.getDate().toString();
+    nextVisitMonth = monthNames[visitDate.getMonth()];
+  }
+
   const renderContent = () => {
     return (
       <ScrollView
@@ -206,11 +264,15 @@ export default function DashboardScreen({ navigation: navProp }) {
                 </View>
               </TouchableOpacity>
               <View style={styles.greetingContainer}>
-                <Text style={styles.greetingLight}>Good to see you,</Text>
-                <Text style={styles.greetingBold}>{user?.name || 'Beautiful Mother'}</Text>
+                <Text style={styles.greetingLight}>{t('welcome')},</Text>
+                <Text style={styles.greetingBold}>{user?.name || t('beautifulMother')}</Text>
               </View>
             </View>
-            <TouchableOpacity style={styles.notifBtn} activeOpacity={0.8}>
+            <TouchableOpacity
+              style={styles.notifBtn}
+              activeOpacity={0.8}
+              onPress={() => navigation.navigate('Notifications')}
+            >
               <Text style={styles.notifIcon}>🔔</Text>
               <View style={styles.notifBadge} />
             </TouchableOpacity>
@@ -222,11 +284,11 @@ export default function DashboardScreen({ navigation: navProp }) {
             <View style={styles.progressCardBody}>
               <View style={styles.progressHeaderRow}>
                 <View>
-                  <Text style={styles.progressMonthLabel}>Pregnancy Journey</Text>
-                  <Text style={styles.progressMonthValue}>Month {month}</Text>
+                  <Text style={styles.progressMonthLabel}>{t('pregnancyJourney')}</Text>
+                  <Text style={styles.progressMonthValue}>{t('month')} {month}</Text>
                   <View style={styles.trimesterPill}>
                     <Text style={styles.trimesterPillText}>
-                      {trimester === 1 ? '1st' : trimester === 2 ? '2nd' : '3rd'} Trimester
+                      {trimester === 1 ? '1st' : trimester === 2 ? '2nd' : '3rd'} {t('trimester')}
                     </Text>
                   </View>
                 </View>
@@ -260,16 +322,16 @@ export default function DashboardScreen({ navigation: navProp }) {
                     <Text style={styles.bentoIcon}>❤️</Text>
                   </View>
                 </View>
-                <Text style={styles.bentoLabel}>Health</Text>
+                <Text style={styles.bentoLabel}>{t('health')}</Text>
                 <Text style={[styles.bentoValue, { color: SUCCESS_COLOR }]}>
-                  {risk.level === 'Safe' ? 'Optimal' : 'Stable'}
+                  {risk.level === 'Safe' ? t('healthOptimal') : t('healthStatus')}
                 </Text>
               </View>
 
               <View style={[styles.bentoCard, styles.bentoCardLarge, { backgroundColor: riskBgColor }]}>
                 <View style={styles.riskCardInner}>
                   <View>
-                    <Text style={styles.bentoLabel}>AI Risk Analysis</Text>
+                    <Text style={styles.bentoLabel}>{t('aiAnalysis')}</Text>
                     <Text style={[styles.bentoValueBig, { color: riskColor }]}>
                       {risk.level === 'Safe' ? 'Low' : risk.level}
                     </Text>
@@ -290,14 +352,14 @@ export default function DashboardScreen({ navigation: navProp }) {
               {/* Movement Card */}
               <TouchableOpacity
                 style={[styles.bentoCard, styles.bentoCardHalf]}
-                onPress={() => navigation.getParent()?.navigate('Tracker')}
+                onPress={() => navigation.getParent()?.navigate('Tracker') || navigation.navigate('Tracker')}
                 activeOpacity={0.9}
               >
                 <View style={[styles.bentoIconBox, { backgroundColor: `${PRIMARY}15`, marginBottom: 12 }]}>
                   <Text style={styles.bentoIcon}>👣</Text>
                 </View>
-                <Text style={styles.bentoLabel}>Baby Kicks</Text>
-                <Text style={styles.bentoValueAction}>Log Now</Text>
+                <Text style={styles.bentoLabel}>{t('babyKicks')}</Text>
+                <Text style={styles.bentoValueAction}>{kicksCount > 0 ? `${kicksCount} Kicks` : t('logNow')}</Text>
                 <View style={styles.actionArrowBox}>
                   <Text style={styles.actionArrow}>→</Text>
                 </View>
@@ -308,10 +370,10 @@ export default function DashboardScreen({ navigation: navProp }) {
                 <View style={[styles.bentoIconBox, { backgroundColor: '#4361EE15', marginBottom: 12 }]}>
                   <Text style={styles.bentoIcon}>🏥</Text>
                 </View>
-                <Text style={styles.bentoLabel}>Next Visit</Text>
+                <Text style={styles.bentoLabel}>{t('nextVisit')}</Text>
                 <View style={styles.clinicDateBox}>
-                  <Text style={styles.clinicDay}>12</Text>
-                  <Text style={styles.clinicMonth}>NOV</Text>
+                  <Text style={styles.clinicDay}>{nextVisitDay}</Text>
+                  <Text style={styles.clinicMonth}>{nextVisitMonth}</Text>
                 </View>
               </View>
 
@@ -324,8 +386,8 @@ export default function DashboardScreen({ navigation: navProp }) {
               <Text style={styles.tipIcon}>✨</Text>
             </View>
             <View style={styles.tipContent}>
-              <Text style={styles.tipTitle}>Daily Insight</Text>
-              <Text style={styles.tipText}>Stay hydrated and rest for at least 8 hours today for optimal growth.</Text>
+              <Text style={styles.tipTitle}>{t('dailyInsight')}</Text>
+              <Text style={styles.tipText}>{t('tipText')}</Text>
             </View>
           </View>
 
@@ -364,25 +426,31 @@ export default function DashboardScreen({ navigation: navProp }) {
               <View style={styles.drawerMenu}>
                 <TouchableOpacity style={styles.menuItem} onPress={() => handleMenuPress('profile')} activeOpacity={0.7}>
                   <View style={[styles.menuIconBox, { backgroundColor: '#4361EE15' }]}><Text style={styles.menuIcon}>👤</Text></View>
-                  <Text style={styles.menuText}>My Profile</Text>
+                  <Text style={styles.menuText}>{t('myProfile')}</Text>
                   <Text style={styles.menuArrow}>›</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.menuItem} onPress={() => handleMenuPress('history')} activeOpacity={0.7}>
                   <View style={[styles.menuIconBox, { backgroundColor: `${PRIMARY}15` }]}><Text style={styles.menuIcon}>📊</Text></View>
-                  <Text style={styles.menuText}>Health History</Text>
+                  <Text style={styles.menuText}>{t('healthHistory')}</Text>
                   <Text style={styles.menuArrow}>›</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.menuItem} onPress={() => handleMenuPress('nutrition')} activeOpacity={0.7}>
                   <View style={[styles.menuIconBox, { backgroundColor: '#22c55e15' }]}><Text style={styles.menuIcon}>🥗</Text></View>
-                  <Text style={styles.menuText}>Nutrition Plan</Text>
+                  <Text style={styles.menuText}>{t('nutritionPlan')}</Text>
                   <Text style={styles.menuArrow}>›</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.menuItem} onPress={() => handleMenuPress('settings')} activeOpacity={0.7}>
                   <View style={[styles.menuIconBox, { backgroundColor: '#8D99AE15' }]}><Text style={styles.menuIcon}>⚙️</Text></View>
-                  <Text style={styles.menuText}>Settings</Text>
+                  <Text style={styles.menuText}>{t('settings')}</Text>
+                  <Text style={styles.menuArrow}>›</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.menuItem} onPress={() => handleMenuPress('reminders')} activeOpacity={0.7}>
+                  <View style={[styles.menuIconBox, { backgroundColor: '#FFD16615' }]}><Text style={styles.menuIcon}>⏰</Text></View>
+                  <Text style={styles.menuText}>Health Reminders</Text>
                   <Text style={styles.menuArrow}>›</Text>
                 </TouchableOpacity>
 
@@ -390,7 +458,7 @@ export default function DashboardScreen({ navigation: navProp }) {
 
                 <TouchableOpacity style={styles.menuItem} onPress={() => handleMenuPress('logout')} activeOpacity={0.7}>
                   <View style={[styles.menuIconBox, { backgroundColor: `${DANGER_COLOR}15` }]}><Text style={styles.menuIcon}>🚪</Text></View>
-                  <Text style={[styles.menuText, { color: DANGER_COLOR, fontWeight: '700' }]}>Logout</Text>
+                  <Text style={[styles.menuText, { color: DANGER_COLOR, fontWeight: '700' }]}>{t('logout')}</Text>
                 </TouchableOpacity>
               </View>
             </TouchableOpacity>

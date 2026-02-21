@@ -57,6 +57,8 @@ export const recordMovement = (hasMovement, count) => request('POST', '/movement
 export const getMovements = () => request('GET', '/movements');
 export const triggerEmergency = (message) => request('POST', '/emergency', { message });
 export const getUser = () => request('GET', '/auth/me');
+export const updateProfile = (data) => request('PUT', '/auth/update-profile', data);
+export const predictNutrition = (pregnancy_month) => request('POST', '/nutrition/predict-nutrition', { pregnancy_month });
 
 export const analyzeAudio = async (uri, mimeType = 'audio/m4a') => {
   const url = `${API_BASE}/voice/analyze`;

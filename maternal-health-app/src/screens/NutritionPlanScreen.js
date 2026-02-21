@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,8 +7,10 @@ import {
   ScrollView,
   Dimensions,
   StatusBar,
+  ActivityIndicator,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { getUser, predictNutrition } from '../services/api';
 
 const { width } = Dimensions.get('window');
 
@@ -28,7 +30,44 @@ const DANGER_SOFT = '#ffebee';
 export default function NutritionPlanScreen() {
   const navigation = useNavigation();
   const [waterGlasses, setWaterGlasses] = useState(8);
-  const [pregnancyMonth] = useState(5);
+  const [pregnancyMonth, setPregnancyMonth] = useState(1);
+  const [trimester, setTrimester] = useState('First Trimester');
+  const [foodsToEat, setFoodsToEat] = useState([]);
+  const [foodsToAvoid, setFoodsToAvoid] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    try {
+      const u = await getUser();
+      const month = u?.pregnancyMonth || 1;
+      setPregnancyMonth(month);
+
+      const nutritionPlan = await predictNutrition(month);
+
+      setTrimester(nutritionPlan.trimester);
+      const eatItems = nutritionPlan.recommended_foods.map((food, index) => ({
+        icon: index === 0 ? '🥗' : index === 1 ? '🥚' : index === 2 ? '🥦' : '🥛',
+        title: food,
+        subtitle: 'Recommended for you',
+        bgColor: SUCCESS_SOFT,
+      }));
+      setFoodsToEat(eatItems);
+
+      const avoidItems = nutritionPlan.avoid_foods.map((food, index) => ({
+        icon: index === 0 ? '🍔' : index === 1 ? '☕' : '🚫',
+        title: food,
+      }));
+      setFoodsToAvoid(avoidItems);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleGoBack = () => {
     navigation.goBack();
@@ -44,23 +83,10 @@ export default function NutritionPlanScreen() {
     }
   };
 
-  const foodsToEat = [
-    { icon: '🥗', title: 'Iron Rich Food', subtitle: 'Spinach, lean meat, lentils', bgColor: SUCCESS_SOFT },
-    { icon: '🥚', title: 'Protein Power', subtitle: 'Eggs, chicken, tofu, beans', bgColor: SUCCESS_SOFT },
-    { icon: '🥦', title: 'Fruits & Veggies', subtitle: 'Colorful variety, high fiber', bgColor: SUCCESS_SOFT },
-  ];
-
-  const foodsToAvoid = [
-    { icon: '🍔', title: 'Junk Food' },
-    { icon: '☕', title: 'High Caffeine' },
-    { icon: '🍣', title: 'Raw Items' },
-    { icon: '🥫', title: 'Processed' },
-  ];
-
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={BG_LIGHT} />
-      
+
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerTop}>
@@ -80,95 +106,103 @@ export default function NutritionPlanScreen() {
         </View>
       </View>
 
-      <ScrollView 
-        style={styles.scrollView} 
+      <ScrollView
+        style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Month Badge */}
-        <View style={styles.monthBadge}>
-          <Text style={styles.monthBadgeIcon}>📅</Text>
-          <Text style={styles.monthBadgeText}>Month {pregnancyMonth} Nutrition Plan</Text>
-        </View>
-
-        {/* Hero Card */}
-        <View style={styles.heroCard}>
-          <View style={styles.heroGlow} />
-          <View style={styles.heroContent}>
-            <Text style={styles.heroTitle}>Mid-Pregnancy Energy</Text>
-            <Text style={styles.heroSubtitle}>
-              In month {pregnancyMonth}, your baby is growing rapidly. Focus on iron and protein.
-            </Text>
-            <TouchableOpacity style={styles.heroBtn} activeOpacity={0.8}>
-              <Text style={styles.heroBtnText}>Get Daily Log</Text>
-            </TouchableOpacity>
+        {loading ? (
+          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', marginTop: 100 }}>
+            <ActivityIndicator size="large" color={PRIMARY} />
+            <Text style={{ marginTop: 10, color: TEXT_MUTED }}>Analyzing nutrition profile...</Text>
           </View>
-          <View style={styles.heroIconWrap}>
-            <Text style={styles.heroIcon}>🍽️</Text>
-          </View>
-        </View>
-
-        {/* Section: What You Should Eat */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionIcon}>✅</Text>
-            <Text style={styles.sectionTitle}>What You Should Eat</Text>
-          </View>
-          <View style={styles.foodList}>
-            {foodsToEat.map((food, index) => (
-              <TouchableOpacity key={index} style={styles.foodCard} activeOpacity={0.8}>
-                <View style={[styles.foodIconBox, { backgroundColor: food.bgColor }]}>
-                  <Text style={styles.foodIcon}>{food.icon}</Text>
-                </View>
-                <View style={styles.foodContent}>
-                  <Text style={styles.foodTitle}>{food.title}</Text>
-                  <Text style={styles.foodSubtitle}>{food.subtitle}</Text>
-                </View>
-                <Text style={styles.foodArrow}>›</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        {/* Section: What to Avoid */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionIconWarning}>⚠️</Text>
-            <Text style={styles.sectionTitle}>What to Avoid</Text>
-          </View>
-          <View style={styles.avoidContainer}>
-            <View style={styles.avoidGrid}>
-              {foodsToAvoid.map((food, index) => (
-                <View key={index} style={styles.avoidCard}>
-                  <Text style={styles.avoidIcon}>{food.icon}</Text>
-                  <Text style={styles.avoidTitle}>{food.title}</Text>
-                </View>
-              ))}
+        ) : (
+          <>
+            {/* Month Badge */}
+            <View style={styles.monthBadge}>
+              <Text style={styles.monthBadgeIcon}>📅</Text>
+              <Text style={styles.monthBadgeText}>Month {pregnancyMonth} Nutrition Plan</Text>
             </View>
-          </View>
-        </View>
 
-        {/* Section: Daily Hydration */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Daily Hydration</Text>
-          <View style={styles.hydrationCard}>
-            <View style={styles.hydrationLeft}>
-              <View style={styles.hydrationIconBox}>
-                <Text style={styles.hydrationIcon}>💧</Text>
+            {/* Hero Card */}
+            <View style={styles.heroCard}>
+              <View style={styles.heroGlow} />
+              <View style={styles.heroContent}>
+                <Text style={styles.heroTitle}>{trimester} Energy</Text>
+                <Text style={styles.heroSubtitle}>
+                  In month {pregnancyMonth}, your baby is growing rapidly. Focus on the recommended diet below.
+                </Text>
+                <TouchableOpacity style={styles.heroBtn} activeOpacity={0.8}>
+                  <Text style={styles.heroBtnText}>Get Daily Log</Text>
+                </TouchableOpacity>
               </View>
-              <View style={styles.hydrationContent}>
-                <Text style={styles.hydrationText}>{waterGlasses}/10 Glasses</Text>
-                <View style={styles.progressBar}>
-                  <View style={[styles.progressFill, { width: `${waterGlasses * 10}%` }]} />
+              <View style={styles.heroIconWrap}>
+                <Text style={styles.heroIcon}>🍽️</Text>
+              </View>
+            </View>
+
+            {/* Section: What You Should Eat */}
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionIcon}>✅</Text>
+                <Text style={styles.sectionTitle}>What You Should Eat</Text>
+              </View>
+              <View style={styles.foodList}>
+                {foodsToEat.map((food, index) => (
+                  <TouchableOpacity key={index} style={styles.foodCard} activeOpacity={0.8}>
+                    <View style={[styles.foodIconBox, { backgroundColor: food.bgColor }]}>
+                      <Text style={styles.foodIcon}>{food.icon}</Text>
+                    </View>
+                    <View style={styles.foodContent}>
+                      <Text style={styles.foodTitle}>{food.title}</Text>
+                      <Text style={styles.foodSubtitle}>{food.subtitle}</Text>
+                    </View>
+                    <Text style={styles.foodArrow}>›</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            {/* Section: What to Avoid */}
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionIconWarning}>⚠️</Text>
+                <Text style={styles.sectionTitle}>What to Avoid</Text>
+              </View>
+              <View style={styles.avoidContainer}>
+                <View style={styles.avoidGrid}>
+                  {foodsToAvoid.map((food, index) => (
+                    <View key={index} style={styles.avoidCard}>
+                      <Text style={styles.avoidIcon}>{food.icon}</Text>
+                      <Text style={styles.avoidTitle}>{food.title}</Text>
+                    </View>
+                  ))}
                 </View>
               </View>
             </View>
-            <TouchableOpacity style={styles.addBtn} onPress={handleAddWater} activeOpacity={0.8}>
-              <Text style={styles.addBtnIcon}>+</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
 
+            {/* Section: Daily Hydration */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Daily Hydration</Text>
+              <View style={styles.hydrationCard}>
+                <View style={styles.hydrationLeft}>
+                  <View style={styles.hydrationIconBox}>
+                    <Text style={styles.hydrationIcon}>💧</Text>
+                  </View>
+                  <View style={styles.hydrationContent}>
+                    <Text style={styles.hydrationText}>{waterGlasses}/10 Glasses</Text>
+                    <View style={styles.progressBar}>
+                      <View style={[styles.progressFill, { width: `${waterGlasses * 10}%` }]} />
+                    </View>
+                  </View>
+                </View>
+                <TouchableOpacity style={styles.addBtn} onPress={handleAddWater} activeOpacity={0.8}>
+                  <Text style={styles.addBtnIcon}>+</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </>
+        )}
         <View style={{ height: 100 }} />
       </ScrollView>
     </View>

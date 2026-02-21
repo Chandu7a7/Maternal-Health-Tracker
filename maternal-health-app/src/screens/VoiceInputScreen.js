@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useContext } from 'react';
 import {
   View,
   Text,
@@ -14,16 +14,18 @@ import {
 } from 'react-native';
 import { Audio } from 'expo-av';
 import { analyzeAudio, addSymptom } from '../services/api';
+import { LanguageContext } from '../context/LanguageContext';
 
 const PRIMARY = '#ec135b';
 const BG_COLOR = '#F9FBFC';
 
 export default function VoiceInputScreen({ navigation }) {
+  const { t } = useContext(LanguageContext);
   const [recording, setRecording] = useState(null);
   const [isRecording, setIsRecording] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [text, setText] = useState('');
-  const [status, setStatus] = useState('Ready to listen');
+  const [status, setStatus] = useState(t('readyListen'));
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
@@ -120,11 +122,20 @@ export default function VoiceInputScreen({ navigation }) {
   const handleSaveSymptom = async () => {
     if (!text.trim()) return;
     setIsAnalyzing(true);
+    setStatus('Analyzing with AI...');
     try {
-      await addSymptom(text);
-      Alert.alert('Success', 'Your symptom has been recorded.');
+      // Background AI evaluation happens in this API call automatically
+      const result = await addSymptom(text);
+
       setText('');
-      setStatus('Symptom saved');
+      setStatus('Ready');
+
+      // Automatically Navigate to HealthRiskStatusScreen with risk data
+      navigation.navigate('HealthRiskStatus', {
+        riskLevel: result.risk,
+        advice: result.advice,
+      });
+
     } catch (err) {
       Alert.alert('Error', 'Failed to save symptom');
     } finally {
@@ -137,8 +148,8 @@ export default function VoiceInputScreen({ navigation }) {
       <StatusBar barStyle="dark-content" />
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.header}>
-          <Text style={styles.title}>Voice Input</Text>
-          <Text style={styles.subtitle}>Tell AI how you feel today</Text>
+          <Text style={styles.title}>{t('voiceInput')}</Text>
+          <Text style={styles.subtitle}>{t('tellAI')}</Text>
         </View>
 
         <View style={styles.main}>
@@ -172,12 +183,12 @@ export default function VoiceInputScreen({ navigation }) {
           </View>
 
           <View style={styles.inputCard}>
-            <Text style={styles.inputLabel}>RECOGNIZED SYMPTOMS</Text>
+            <Text style={styles.inputLabel}>{t('recognizedSymptoms')}</Text>
             <TextInput
               style={styles.textInput}
               value={text}
               onChangeText={setText}
-              placeholder="Your symptoms will appear here after recording..."
+              placeholder={t('placeholder')}
               multiline
               numberOfLines={4}
               editable={!isAnalyzing}
@@ -190,14 +201,14 @@ export default function VoiceInputScreen({ navigation }) {
               onPress={handleSaveSymptom}
               disabled={!text || isAnalyzing}
             >
-              <Text style={styles.buttonText}>Save Symptom</Text>
+              <Text style={styles.buttonText}>{t('saveSymptom')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               style={styles.clearButton}
-              onPress={() => { setText(''); setStatus('Ready'); }}
+              onPress={() => { setText(''); setStatus(t('readyListen') || 'Ready to listen'); }}
             >
-              <Text style={styles.clearButtonText}>Clear</Text>
+              <Text style={styles.clearButtonText}>{t('clear')}</Text>
             </TouchableOpacity>
           </View>
         </View>

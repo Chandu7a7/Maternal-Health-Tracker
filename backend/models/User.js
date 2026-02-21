@@ -9,6 +9,12 @@ const userSchema = new mongoose.Schema({
   pregnancyMonth: { type: Number, default: 1 },
   familyContact: { type: String, default: '' },
   doctorContact: { type: String, default: '' },
+  nextDoctorVisit: { type: Date },
+  medications: [{
+    name: { type: String },
+    time: { type: String },
+    taken: { type: Boolean, default: false }
+  }]
 }, { timestamps: true });
 
 userSchema.pre('save', async function (next) {

@@ -75,3 +75,24 @@ exports.me = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
+
+exports.updateProfile = async (req, res) => {
+  try {
+    const { User } = getStore();
+    const user = await User.findById(req.userId);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const updates = req.body;
+    // Prevent sensitive fields from being updated here
+    delete updates.password;
+    delete updates._id;
+    delete updates.mobile;
+
+    Object.assign(user, updates);
+    await user.save();
+
+    res.json(user);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};

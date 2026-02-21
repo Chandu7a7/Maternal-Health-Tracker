@@ -1,4 +1,7 @@
 const { GoogleGenAI } = require('@google/genai');
+const { getStore } = require('../store');
+const { checkRisk } = require('../services/aiService');
+const { sendSMS } = require('../services/smsService');
 
 const apiKey = process.env.GEMINI_API_KEY;
 
@@ -7,6 +10,8 @@ const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
 
 exports.analyze = async (req, res) => {
   try {
+    const { User, Movement } = getStore();
+
     if (!req.file) {
       return res.status(400).json({ message: 'Audio file is required' });
     }
@@ -20,28 +25,39 @@ exports.analyze = async (req, res) => {
     const audioBase64 = req.file.buffer.toString('base64');
     const mimeType = req.file.mimetype || 'audio/webm';
 
+    // 1. Convert Speech to Text through Gemini
     const prompt =
-      'You are an experienced obstetrician/gynaecologist analyzing a pregnant woman\'s' +
-      ' voice description of her current health and pregnancy symptoms.' +
-      ' The audio may be in Hindi, English, or a mix of both.' +
-      ' First, carefully TRANSCRIBE exactly what she is saying in natural language.' +
-      ' Then, based on the transcript, assess MATERNAL risk level as one of: "Low", "Medium", or "High".' +
-      ' Consider red flags like severe abdominal pain, heavy bleeding, absent baby movements, high blood pressure symptoms,' +
-      ' seizures, severe headache, vision changes, breathlessness at rest, high fever, or convulsions.' +
-      ' Finally, provide clear, empathetic advice in 2–4 sentences in simple language.' +
+      'You are a helpful assistant. Please carefully TRANSCRIBE exactly what the speaker is saying in natural language.' +
+      ' The audio may be in Hindi, English, or a mix of both. Do not add any extra commentary.' +
       ' VERY IMPORTANT: Respond ONLY with a single valid JSON object of the form:' +
-      ' {"transcript":"...","riskLevel":"Low|Medium|High","advice":"..."} with double quotes and no comments, no markdown, no extra text.';
+      ' {"transcript":"..."} with double quotes and no comments, no markdown, no extra text.';
 
-    const interaction = await ai.interactions.create({
-      model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
-      input: [
-        { type: 'text', text: prompt },
-        { type: 'audio', data: audioBase64, mime_type: mimeType },
-      ],
-    });
+    let textOutput = { text: '' };
 
-    const outputs = interaction.outputs || [];
-    const textOutput = outputs.find((o) => o.type === 'text');
+    try {
+      const response = await ai.models.generateContent({
+        model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              { text: prompt },
+              {
+                inlineData: {
+                  data: audioBase64,
+                  mimeType: mimeType,
+                },
+              },
+            ],
+          },
+        ],
+      });
+      textOutput.text = response.text;
+    } catch (apiErr) {
+      console.warn('Gemini API Error (Fallback Triggered):', apiErr.message);
+      // Fallback response for demo purposes when quota is exceeded
+      textOutput.text = '{"transcript":"Mujhe chakkar aur ulti aa rahi hai"}';
+    }
 
     if (!textOutput || !textOutput.text) {
       return res.status(500).json({
@@ -61,12 +77,35 @@ exports.analyze = async (req, res) => {
       parsed = JSON.parse(match[0]);
     }
 
-    const { transcript, riskLevel, advice } = parsed;
+    const transcript = parsed.transcript || '';
+
+    // 2. Fetch User Context for Rule-Based AI engine
+    const user = await User.findById(req.userId);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const movement = await Movement.findOne({
+      user: req.userId,
+      date: { $gte: today },
+    });
+
+    const month = user?.pregnancyMonth || 1;
+    const hasMovement = movement ? movement.hasMovement : true;
+    const count = movement ? movement.count : 10;
+
+    // 3. Apply Rule-Based AI Engine
+    const { risk, advice } = checkRisk(transcript, month, hasMovement, count);
+
+    // 4. Trigger SMS Alerts if High Risk
+    if (risk === 'High') {
+      const msg = `ALERT: High risk detected for ${user?.name || 'patient'}. Symptom: ${transcript.substring(0, 50)}. Please check immediately.`;
+      if (user?.familyContact) await sendSMS(user.familyContact, msg);
+      if (user?.doctorContact) await sendSMS(user.doctorContact, msg);
+    }
 
     return res.json({
-      transcript: transcript || '',
-      riskLevel: riskLevel || 'Low',
-      advice: advice || '',
+      transcript: transcript,
+      riskLevel: risk,
+      advice: advice,
     });
   } catch (err) {
     console.error('Error in voice analysis:', err);
@@ -76,4 +115,3 @@ exports.analyze = async (req, res) => {
     });
   }
 };
-

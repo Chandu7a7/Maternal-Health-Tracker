@@ -1,5 +1,12 @@
 # 🤰 Maternal Health Tracker
 
+
+<!-- $env:REACT_NATIVE_PACKAGER_HOSTNAME="127.0.0.1"; npx expo start --clear --tunnel -->
+
+<!-- backend> $env:NODE_TLS_REJECT_UNAUTHORIZED="0"; npm start         -->
+
+<!-- backend>  cloudflared tunnel --url http://localhost:5000 -->
+
 <div align="center">
 
 **AI-Powered Voice-Based Maternal Health Monitoring System**

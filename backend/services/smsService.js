@@ -1,36 +1,34 @@
-const twilio = require('twilio');
+const axios = require("axios");
 
-let client = null;
-
-function init() {
-  const sid = process.env.TWILIO_ACCOUNT_SID;
-  const token = process.env.TWILIO_AUTH_TOKEN;
-  const from = process.env.TWILIO_PHONE_NUMBER;
-  if (sid && token && from) {
-    client = twilio(sid, token);
-    return { from };
-  }
-  return null;
-}
-
-const twilioConfig = init();
-
-async function sendSMS(to, body) {
-  if (!client || !twilioConfig) {
-    console.log('[SMS] Twilio not configured. Would send:', to, body);
-    return { ok: true, simulated: true };
-  }
+exports.sendEmergencySMS = async (doctor, family) => {
   try {
-    await client.messages.create({
-      body,
-      from: twilioConfig.from,
-      to: to.startsWith('+') ? to : `+91${to}`,
-    });
-    return { ok: true };
-  } catch (err) {
-    console.error('Twilio error:', err.message);
-    return { ok: false, error: err.message };
-  }
-}
+    // The user explicitly requested to use these numbers: 7725094650, 909838601
+    // We will use the user's numbers if available, otherwise fallback to these hardcoded ones
+    const numbers = (doctor || family) ? `${doctor}${family ? ',' + family : ''}` : "7725094650,909838601";
 
-module.exports = { sendSMS };
+    // Exact payload as requested by user
+    const payload = {
+      route: "q",
+      message: "Emergences Contact this user",
+      flash: 0,
+      numbers: numbers
+    };
+
+    console.log("[SMS] Sending POST to Fast2SMS with payload:", payload);
+    console.log(`[SMS] Target Numbers: ${numbers}`);
+    console.log(`[SMS] Message: "${payload.message}"`);
+
+    const response = await axios.post("https://www.fast2sms.com/dev/bulkV2", payload, {
+      headers: {
+        "authorization": process.env.FAST2SMS_API_KEY,
+        "Content-Type": "application/json"
+      }
+    });
+
+    console.log("[SMS] Fast2SMS Response:", response.data);
+    return response.data;
+  } catch (error) {
+    console.error("[SMS] Error details:", error.response?.data || error.message);
+    return null;
+  }
+};

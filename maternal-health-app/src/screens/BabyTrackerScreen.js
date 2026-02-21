@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert } from 'react-native';
 import { recordMovement, getMovements } from '../services/api';
 import { formatDate } from '../utils/helpers';
+import { useNavigation } from '@react-navigation/native';
 
 const PRIMARY = '#ec135b';
 const BG_LIGHT = '#fdf8fa';
@@ -9,6 +10,7 @@ const SUCCESS = '#22c55e';
 const ERROR = '#ef4444';
 
 export default function BabyTrackerScreen() {
+  const navigation = useNavigation();
   const [todayMovement, setTodayMovement] = useState(null);
   const [count, setCount] = useState(12);
   const [history, setHistory] = useState([]);
@@ -24,7 +26,7 @@ export default function BabyTrackerScreen() {
         (m) => new Date(m.date).toDateString() === today
       );
       setTodayMovement(todayRec?.hasMovement ?? null);
-      setCount(todayRec?.count ?? 12);
+      setCount(todayRec?.count ?? 0);
       if (todayRec?.date) {
         const date = new Date(todayRec.date);
         setLastRecorded(date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }));
@@ -39,18 +41,25 @@ export default function BabyTrackerScreen() {
   const record = async (hasMovement) => {
     setLoading(true);
     try {
-      const newCount = hasMovement ? count + 1 : count;
-      await recordMovement(hasMovement, newCount);
+      const newCount = hasMovement ? count : 0; // If they click No, it's 0. If yes, it uses current counter.
+      const result = await recordMovement(hasMovement, newCount);
+
       setTodayMovement(hasMovement);
-      setCount(newCount);
+      setCount(result.count);
       setLastRecorded(new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }));
+
+      if (result.risk === 'High' || result.risk === 'Medium') {
+        navigation.navigate('HealthRiskStatus', {
+          riskLevel: result.risk,
+          advice: result.advice
+        });
+      } else {
+        Alert.alert('Success', 'Movement recorded successfully');
+      }
+
       load();
     } catch (e) {
-      setTodayMovement(hasMovement);
-      if (hasMovement) {
-        setCount((c) => c + 1);
-      }
-      setLastRecorded(new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }));
+      Alert.alert('Error', 'Failed to record movement');
     } finally {
       setLoading(false);
     }
@@ -69,7 +78,7 @@ export default function BabyTrackerScreen() {
     const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     const today = new Date();
     const chartData = [];
-    
+
     for (let i = 6; i >= 0; i--) {
       const date = new Date(today);
       date.setDate(date.getDate() - i);
@@ -83,7 +92,7 @@ export default function BabyTrackerScreen() {
         isToday: i === 0,
       });
     }
-    
+
     return chartData;
   };
 
@@ -113,7 +122,7 @@ export default function BabyTrackerScreen() {
                 styles.btnYes,
                 todayMovement === true && styles.btnYesSelected,
               ]}
-              onPress={() => record(true)}
+              onPress={() => setTodayMovement(true)}
               disabled={loading}
               activeOpacity={0.8}
             >
@@ -126,7 +135,10 @@ export default function BabyTrackerScreen() {
                 styles.btnNo,
                 todayMovement === false && styles.btnNoSelected,
               ]}
-              onPress={() => record(false)}
+              onPress={() => {
+                setTodayMovement(false);
+                record(false);
+              }}
               disabled={loading}
               activeOpacity={0.8}
             >
@@ -159,6 +171,15 @@ export default function BabyTrackerScreen() {
               <Text style={styles.counterIconAdd}>+</Text>
             </TouchableOpacity>
           </View>
+
+          <TouchableOpacity
+            style={[styles.saveBtn, (!todayMovement || loading) && { backgroundColor: '#cbd5e1' }]}
+            onPress={() => record(true)}
+            disabled={loading || todayMovement !== true}
+          >
+            <Text style={styles.saveBtnText}>{loading ? 'Saving...' : 'Save Movement Record'}</Text>
+          </TouchableOpacity>
+
           {lastRecorded && (
             <Text style={styles.lastRecorded}>Last recorded: {lastRecorded}</Text>
           )}
@@ -292,6 +313,8 @@ const styles = StyleSheet.create({
   btnYesSelected: {
     backgroundColor: SUCCESS,
     opacity: 0.9,
+    borderWidth: 3,
+    borderColor: '#fff',
   },
   btnNo: {
     backgroundColor: ERROR,
@@ -299,6 +322,8 @@ const styles = StyleSheet.create({
   btnNoSelected: {
     backgroundColor: ERROR,
     opacity: 0.9,
+    borderWidth: 3,
+    borderColor: '#fff',
   },
   checkIcon: {
     fontSize: 36,
@@ -313,13 +338,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 24,
-    marginBottom: 24,
+    gap: 12,
+    marginBottom: 20,
   },
   counterBtn: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     backgroundColor: `${PRIMARY}1A`,
     borderWidth: 2,
     borderColor: `${PRIMARY}33`,
@@ -336,12 +361,12 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   counterIcon: {
-    fontSize: 36,
+    fontSize: 28,
     fontWeight: '700',
     color: PRIMARY,
   },
   counterIconAdd: {
-    fontSize: 36,
+    fontSize: 28,
     fontWeight: '700',
     color: '#fff',
   },
@@ -350,18 +375,34 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   counterNumber: {
-    fontSize: 60,
+    fontSize: 48,
     fontWeight: '900',
     color: PRIMARY,
-    lineHeight: 72,
   },
   counterLabel: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '700',
     color: '#64748b',
-    letterSpacing: 2,
+    letterSpacing: 1,
     textTransform: 'uppercase',
-    marginTop: 4,
+  },
+  saveBtn: {
+    backgroundColor: PRIMARY,
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+    shadowColor: PRIMARY,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  saveBtnText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
   },
   lastRecorded: {
     fontSize: 14,
